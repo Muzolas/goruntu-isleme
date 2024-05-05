@@ -67,70 +67,71 @@ class Project_2(QMainWindow):
     def calculate_dark_green_properties(self):
 
         image = self.label_58.pixmap().toImage()
-
-        # Convert image to numpy array
-        width = image.width()
-        height = image.height()
-        buffer = image.bits().asstring(width * height * 4)
-        img = np.frombuffer(buffer, dtype=np.uint8).reshape((height, width, 4))
-
-        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Uses Matplotlib RGB format
-
-        # Convert image to grayscale
+    
+        # Resmi numpy dizisine dönüştür
+        genişlik = image.width()
+        yükseklik = image.height()
+        buffer = image.bits().asstring(genişlik * yükseklik * 4)
+        img = np.frombuffer(buffer, dtype=np.uint8).reshape((yükseklik, genişlik, 4))
+    
+        image_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)  # Matplotlib RGB formatını kullan
+    
+        # Resmi gri tonlamaya dönüştür
         gray = cv2.cvtColor(img, cv2.COLOR_BGR2GRAY)
-
-        # Apply Gaussian Blur to reduce noise
+    
+        # Gürültüyü azaltmak için Gaussian Bulanıklığı uygula
         blurred = cv2.GaussianBlur(gray, (9, 9), 0)
-
-        # Apply thresholding to detect dark green color
-        lower_green = np.array([0, 100, 0], dtype="uint8")
-        upper_green = np.array([50, 255, 50], dtype="uint8")
-        mask = cv2.inRange(image_rgb, lower_green, upper_green)
-
-        # Find contours on the thresholded image
-        contours, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
-
-        # Create a DataFrame to store the properties
-        data = []
-
-        # Loop over the contours
-        for i, contour in enumerate(contours):
-            # Calculate the area of the contour
-            area = cv2.contourArea(contour)
-
-            # Calculate the centroid of the contour
-            M = cv2.moments(contour)
-            if M['m00'] != 0:  # Avoid division by zero error
+    
+        # Koyu yeşil rengi algılamak için eşikleme uygula
+        alt_yeşil = np.array([0, 100, 0], dtype="uint8")
+        üst_yeşil = np.array([50, 255, 50], dtype="uint8")
+        mask = cv2.inRange(image_rgb, alt_yeşil, üst_yeşil)
+    
+        # Eşiklenmiş resimde konturları bul
+        konturlar, _ = cv2.findContours(mask, cv2.RETR_LIST, cv2.CHAIN_APPROX_SIMPLE)
+    
+        # Özellikleri saklamak için bir DataFrame oluştur
+        veri = []
+    
+        # Konturlar üzerinde döngü
+        for i, kontur in enumerate(konturlar):
+            # Konturun alanını hesapla
+            alan = cv2.contourArea(kontur)
+    
+            # Konturun ağırlık merkezini hesapla
+            M = cv2.moments(kontur)
+            if M['m00'] != 0:  # Sıfıra bölme hatasını önle
                 cx = int(M['m10'] / M['m00'])
                 cy = int(M['m01'] / M['m00'])
             else:
-                cx, cy = 0, 0  # Center will be zero if area is zero
-
-            # Find the bounding rectangle of the contour
-            x, y, w, h = cv2.boundingRect(contour)
-
-            # Calculate the diagonal (length) of the bounding rectangle
-            diagonal = np.sqrt(w ** 2 + h ** 2)
-
-            # Calculate Energy and Entropy
-            energy = cv2.moments(blurred[y:y + h, x:x + w])['nu20'] + cv2.moments(blurred[y:y + h, x:x + w])['nu02']
-            entropy = -np.sum(np.where((blurred[y:y + h, x:x + w] != 0),
+                cx, cy = 0, 0  # Alan sıfır ise merkez sıfır olacak
+    
+            # Konturun sınırlayıcı dikdörtgenini bul
+            x, y, w, h = cv2.boundingRect(kontur)
+    
+            # Sınırlayıcı dikdörtgenin çapını (uzunluğunu) hesapla
+            çap = np.sqrt(w ** 2 + h ** 2)
+    
+            # Enerji ve Entropi hesapla
+            enerji = cv2.moments(blurred[y:y + h, x:x + w])['nu20'] + cv2.moments(blurred[y:y + h, x:x + w])['nu02']
+            entropi = -np.sum(np.where((blurred[y:y + h, x:x + w] != 0),
                                        (blurred[y:y + h, x:x + w] / 255) * np.log(blurred[y:y + h, x:x + w] / 255), 0))
+    
+            # Ortalama ve Medyanı hesapla
+            ortalama_değer = np.mean(blurred[y:y + h, x:x + w])
+            medyan_değer = np.median(blurred[y:y + h, x:x + w])
+    
+            # Özellikleri DataFrame'e ekle
+            veri.append([i + 1, (cx, cy), w, h, çap, enerji, entropi, ortalama_değer, medyan_değer])
+    
+        # DataFrame oluştur
+        sütunlar = ["No", "Merkez", "Uzunluk", "Genişlik", "Çap", "Enerji", "Entropi", "Ortalama", "Medyan"]
+        df = pd.DataFrame(veri, columns=sütunlar)
+    
+        # DataFrame'i Excel dosyasına kaydet
+        df.to_excel("hiperspektral_özellikler.xlsx", index=False)
+        print("Excel dosyası oluşturuldu.")
 
-            # Calculate Mean and Median
-            mean_val = np.mean(blurred[y:y + h, x:x + w])
-            median_val = np.median(blurred[y:y + h, x:x + w])
-
-            # Add the properties to the DataFrame
-            data.append([i + 1, (cx, cy), w, h, diagonal, energy, entropy, mean_val, median_val])
-
-        # Create DataFrame
-        columns = ["No", "Center", "Length", "Width", "Diagonal", "Energy", "Entropy", "Mean", "Median"]
-        df = pd.DataFrame(data, columns=columns)
-
-        # Save DataFrame to Excel file
-        df.to_excel("hyperspectral_properties.xlsx", index=False)
-        print("Excel file created.")
 
     def deblur_image(self):
         # Resmi al
